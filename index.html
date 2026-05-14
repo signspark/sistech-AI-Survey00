@@ -288,9 +288,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Noto Sans KR','Segoe UI',sans
 // ── 설정 ──
 const ADMIN_PW = 'sistech2025'; // ← 관리자 비밀번호 (변경 가능)
 const STORE = 'st_v5', CFG = 'st_cfg_v2', AUTH = 'st_auth';
+const DEFAULT_SHEETS_URL='https://script.google.com/macros/s/AKfycbzTDlnxmpba6bjZu_a1zBjYr2uqs4To2Jm3pqx5gU6ZoSGprtVGUqw5VwlLFTN_xptJSw/exec';
 const loadR=()=>{try{return JSON.parse(localStorage.getItem(STORE)||'[]');}catch(e){return[];}};
 const saveR=a=>{try{localStorage.setItem(STORE,JSON.stringify(a));}catch(e){}};
-const loadCfg=()=>{try{return JSON.parse(localStorage.getItem(CFG)||'{}');}catch(e){return{};}};
+const loadCfg=()=>{try{const c=JSON.parse(localStorage.getItem(CFG)||'{}');if(!c.url)c.url=DEFAULT_SHEETS_URL;return c;}catch(e){return{url:DEFAULT_SHEETS_URL};}};
 const saveCfg=c=>{try{localStorage.setItem(CFG,JSON.stringify(c));}catch(e){}};
 const isAuth=()=>sessionStorage.getItem(AUTH)==='1';
 const setAuth=()=>sessionStorage.setItem(AUTH,'1');
@@ -305,6 +306,7 @@ const APPS=`function doPost(e){
     'AI숙련도','반복작업','도움영역','시간절감기대','활용장벽','보안우려',
     '결과검토','정책부족','교육참여의향','지원요청','교육희망주제','참여의향'];
   if(sh.getLastRow()===0)sh.appendRow(h);
+  sh.getRange('A:A').setNumberFormat('@');
   var d=JSON.parse(e.postData.contents);
   sh.appendRow([d.ts,d.q0_name||'',d.q0_dept||'',
     (d.q1_jobs||[]).join(', '),d.q1_other||'',
@@ -320,8 +322,29 @@ const APPS=`function doPost(e){
   return ContentService.createTextOutput(JSON.stringify({result:'ok'}))
     .setMimeType(ContentService.MimeType.JSON);
 }
-function doGet(){return ContentService.createTextOutput(JSON.stringify({status:'ok'}))
-  .setMimeType(ContentService.MimeType.JSON);}`;
+function doGet(){
+  var ss=SpreadsheetApp.getActiveSpreadsheet();
+  var sh=ss.getSheetByName('설문응답');
+  if(!sh||sh.getLastRow()<2)return ContentService.createTextOutput(JSON.stringify({rows:[]})).setMimeType(ContentService.MimeType.JSON);
+  var split=function(s){return String(s||'').split(', ').filter(function(x){return x;});};
+  var num=function(v){var n=parseInt(v,10);return isNaN(n)?0:n;};
+  var rng=sh.getRange(2,1,sh.getLastRow()-1,25).getValues();
+  var rows=rng.map(function(r){
+    var paidKeys=split(r[7]);var paidVals=split(r[8]);
+    var q3={};paidKeys.forEach(function(k,i){q3[k]=paidVals[i]||'';});
+    return {ts:String(r[0]||''),q0_name:String(r[1]||''),q0_dept:String(r[2]||''),
+      q1_jobs:split(r[3]),q1_other:String(r[4]||''),
+      q2_free:split(r[5]),q2_free_other:String(r[6]||''),
+      q3_paid:q3,
+      q4_score:num(r[9]),q5_exp:String(r[10]||''),q6_freq:String(r[11]||''),
+      q7_ways:split(r[12]),
+      q8_skill:num(r[13]),q9_repeat:num(r[14]),q10_areas:split(r[15]),
+      q11_time:num(r[16]),q12_barriers:split(r[17]),q13_security:num(r[18]),
+      q14_verify:num(r[19]),q15_policy:num(r[20]),q16_edu:num(r[21]),
+      q17_supports:split(r[22]),q18_topic:String(r[23]||''),q19_commit:num(r[24])};
+  });
+  return ContentService.createTextOutput(JSON.stringify({rows:rows})).setMimeType(ContentService.MimeType.JSON);
+}`;
 document.getElementById('sc-area').textContent=APPS;
 
 // ── 상수 ──
@@ -511,17 +534,46 @@ async function sendToSheets(data){const c=loadCfg();if(!c.url)return;try{await f
 function resetSurvey(){step=0;initSt();showOnly('pg-survey');document.getElementById('btn-next').style.display='flex';document.getElementById('btn-back').style.visibility='hidden';document.getElementById('bottom-nav').style.display='flex';renderStep();document.getElementById('content').scrollTop=0;}
 
 // ── 관리자 대시보드 ──
+async function fetchSheetsRows(){
+  const c=loadCfg();if(!c.url)return {ok:true,rows:[]};
+  try{
+    const u=c.url+(c.url.includes('?')?'&':'?')+'t='+Date.now();
+    const res=await fetch(u,{method:'GET'});
+    if(!res.ok)return {ok:false,rows:[]};
+    const data=await res.json();
+    return {ok:true,rows:Array.isArray(data.rows)?data.rows:[]};
+  }catch(e){return {ok:false,rows:[]};}
+}
+function mergeRecords(local,remote){
+  const seen=new Set();const out=[];
+  const keyOf=r=>`${(r.ts||'').replace(/\s+/g,'')}|${r.q0_name||''}|${r.q0_dept||''}`;
+  remote.forEach(r=>{const k=keyOf(r);if(!seen.has(k)){seen.add(k);out.push(r);}});
+  local.forEach(r=>{const k=keyOf(r);if(!seen.has(k)){seen.add(k);out.push(r);}});
+  return out;
+}
 const cntM=a=>{const m={};a.forEach(v=>m[v]=(m[v]||0)+1);return m;};
 const top6=m=>Object.entries(m).sort((a,b)=>b[1]-a[1]).slice(0,6);
 const avgS=arr=>{const v=arr.filter(x=>x>0);return v.length?(v.reduce((a,b)=>a+b,0)/v.length).toFixed(1):'—';};
 const spC=v=>v>=4?'sph':v>=3?'spm':'spl';
 const scStar=v=>v?'★'.repeat(v)+'☆'.repeat(5-v):'—';
 
-function renderAdmin(){
-  const rs=loadR();const n=rs.length;
-  const el=document.getElementById('admin-content');el.innerHTML='';
+async function renderAdmin(){
+  const el=document.getElementById('admin-content');
+  const local=loadR();const c=loadCfg();
+  let rs=local;let fetchErr=false;let remoteCnt=0;
+  if(c.url){
+    el.innerHTML='<div style="padding:30px 20px;text-align:center;font-size:13px;color:var(--muted)">📊 Sheets에서 응답 불러오는 중...</div>';
+    const fr=await fetchSheetsRows();
+    if(fr.ok){rs=mergeRecords(local,fr.rows);remoteCnt=fr.rows.length;}
+    else{fetchErr=true;rs=local;}
+  }
+  const n=rs.length;
+  let banner='';
+  if(fetchErr)banner='<div style="background:#FFF8E1;border:1px solid #FFCC80;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#E65100;line-height:1.5">⚠️ Google Sheets 데이터를 가져오지 못했습니다.<br>이 기기에 저장된 응답만 표시됩니다. (Apps Script 배포 권한이 "모든 사용자"인지, 코드를 재배포했는지 확인하세요)</div>';
+  else if(c.url)banner=`<div style="background:#E8F5E9;border:1px solid #A5D6A7;border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:11px;color:#2E7D32">✅ Sheets 연동 — 시트 ${remoteCnt}건 + 이 기기 ${local.length}건 (중복 제거 후 ${n}건)</div>`;
+  else banner='<div style="background:#FFF8E1;border:1px solid #FFE082;border-radius:8px;padding:10px 12px;margin-bottom:10px;font-size:12px;color:#E65100;line-height:1.5">ℹ️ Sheets URL 미설정 — 이 기기에 저장된 응답만 표시됩니다.<br>다른 사람 응답을 함께 보려면 ⚙ Sheets에서 URL을 설정하세요.</div>';
   const paid=rs.filter(r=>Object.keys(r.q3_paid||{}).length>0).length;
-  el.innerHTML=`<div class="stat-row"><div class="stat-card ac"><div class="stat-val">${n}</div><div class="stat-lbl">총 응답 수</div></div><div class="stat-card"><div class="stat-val">${paid}</div><div class="stat-lbl">유료 AI 사용자</div></div></div><div class="stat-row" style="margin-bottom:12px"><div class="stat-card"><div class="stat-val">${avgS(rs.map(r=>r.q4_score))}</div><div class="stat-lbl">AI 생산성 기대 평균</div></div><div class="stat-card"><div class="stat-val">${avgS(rs.map(r=>r.q19_commit))}</div><div class="stat-lbl">참여 의향 평균</div></div></div>`;
+  el.innerHTML=banner+`<div class="stat-row"><div class="stat-card ac"><div class="stat-val">${n}</div><div class="stat-lbl">총 응답 수</div></div><div class="stat-card"><div class="stat-val">${paid}</div><div class="stat-lbl">유료 AI 사용자</div></div></div><div class="stat-row" style="margin-bottom:12px"><div class="stat-card"><div class="stat-val">${avgS(rs.map(r=>r.q4_score))}</div><div class="stat-lbl">AI 생산성 기대 평균</div></div><div class="stat-card"><div class="stat-val">${avgS(rs.map(r=>r.q19_commit))}</div><div class="stat-lbl">참여 의향 평균</div></div></div>`;
   if(n===0){el.innerHTML+='<div class="empty"><div style="font-size:36px;margin-bottom:10px">📋</div><div style="font-size:14px;font-weight:700;margin-bottom:4px">응답 데이터가 없습니다</div><div style="font-size:12px">설문 탭에서 응답을 추가해 주세요.</div></div>';return;}
 
   function barCard(title,data,total,cc,badge){const d=document.createElement('div');d.className='chart-card';d.innerHTML=`<div class="ct">${title}<span class="cb">${badge||''}</span></div>`;if(!data.length){d.innerHTML+='<div style="font-size:12px;color:var(--muted)">데이터 없음</div>';return d;}data.forEach(([k,v])=>{const pct=total>0?Math.round(v/total*100):0;const r=document.createElement('div');r.className='bar-row';r.innerHTML=`<div class="bar-lbl">${k}</div><div class="bar-track"><div class="bar-fill ${cc}" style="width:${pct}%"></div></div><div class="bar-val">${v}</div>`;d.appendChild(r);});return d;}
@@ -569,9 +621,11 @@ function renderAdmin(){
   el.appendChild(indCard);
 
   const dw=document.createElement('div');dw.className='del-btn-wrap';
-  const db=document.createElement('button');db.className='del-btn';db.textContent='전체 데이터 초기화';
-  db.onclick=()=>{if(confirm('모든 응답을 삭제할까요?')){saveR([]);renderAdmin();}};
-  dw.appendChild(db);el.appendChild(dw);
+  const rb=document.createElement('button');rb.style.cssText='padding:9px 20px;border-radius:var(--rsm);border:1px solid var(--blue);background:transparent;color:var(--blue);font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;margin-right:6px';rb.textContent='🔄 시트에서 다시 불러오기';
+  rb.onclick=()=>renderAdmin();
+  const db=document.createElement('button');db.className='del-btn';db.textContent='내 기기 캐시만 초기화';
+  db.onclick=()=>{if(confirm('이 기기의 로컬 캐시만 비웁니다.\n(Google Sheets 데이터는 유지됩니다)\n계속할까요?')){saveR([]);renderAdmin();}};
+  dw.appendChild(rb);dw.appendChild(db);el.appendChild(dw);
 }
 
 // ── PWA ──
