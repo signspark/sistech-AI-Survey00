@@ -1,4 +1,4 @@
-const CACHE = 'sistech-survey-v1';
+const CACHE = 'sistech-survey-v2';
 const ASSETS = [
   '/',
   '/index.html',
