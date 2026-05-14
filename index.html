@@ -288,7 +288,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Noto Sans KR','Segoe UI',sans
 // ── 설정 ──
 const ADMIN_PW = 'sistech2025'; // ← 관리자 비밀번호 (변경 가능)
 const STORE = 'st_v5', CFG = 'st_cfg_v2', AUTH = 'st_auth';
-const DEFAULT_SHEETS_URL='https://script.google.com/macros/s/AKfycbzTDlnxmpba6bjZu_a1zBjYr2uqs4To2Jm3pqx5gU6ZoSGprtVGUqw5VwlLFTN_xptJSw/exec';
+const DEFAULT_SHEETS_URL='https://script.google.com/macros/s/AKfycbwJ5L_8UDPZrcI3cuJb7fX04LyiM98KjMigTky870SuXYc9mKf-WjFK3jvmap596A96/exec';
 const loadR=()=>{try{return JSON.parse(localStorage.getItem(STORE)||'[]');}catch(e){return[];}};
 const saveR=a=>{try{localStorage.setItem(STORE,JSON.stringify(a));}catch(e){}};
 const loadCfg=()=>{try{const c=JSON.parse(localStorage.getItem(CFG)||'{}');if(!c.url)c.url=DEFAULT_SHEETS_URL;return c;}catch(e){return{url:DEFAULT_SHEETS_URL};}};
