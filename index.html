@@ -224,7 +224,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Noto Sans KR','Segoe UI',sans
     </div>
     <div class="tabs">
       <button class="tab on" id="tab-s" onclick="switchTab('survey')">설문 입력</button>
-      <button class="tab" id="tab-a" onclick="switchTab('admin')" style="display:none">관리자</button>
+      <button class="tab" id="tab-a" onclick="switchTab('admin')">관리자</button>
     </div>
   </div>
 
@@ -366,10 +366,10 @@ function switchTab(t){
 
 function buildHeader(){
   const hr=document.getElementById('hdr-right'); hr.innerHTML='';
-  document.getElementById('tab-a').style.display=isAuth()?'block':'none';
+  // tab-a always visible
   if(isAuth()){
     const lb=document.createElement('button'); lb.className='hbtn'; lb.textContent='로그아웃';
-    lb.onclick=()=>{clearAuth();document.getElementById('tab-a').style.display='none';switchTab('survey');buildHeader();};
+    lb.onclick=()=>{clearAuth();switchTab('survey');buildHeader();};
     const sb=document.createElement('button'); sb.className='hbtn'; sb.textContent='⚙ Sheets';
     sb.onclick=openModal;
     hr.appendChild(sb); hr.appendChild(lb);
@@ -384,7 +384,7 @@ function doLogin(){
     setAuth(); err.style.display='none';
     document.getElementById('pw-inp').value='';
     buildHeader();
-    document.getElementById('tab-a').style.display='block';
+    // tab-a always visible
     document.getElementById('tab-a').classList.add('on');
     document.getElementById('tab-s').classList.remove('on');
     showOnly('pg-admin'); renderAdmin();
